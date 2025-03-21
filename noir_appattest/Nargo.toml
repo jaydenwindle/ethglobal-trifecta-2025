@@ -1,0 +1,8 @@
+[package]
+name = "noir_appattest"
+type = "bin"
+authors = [""]
+
+[dependencies]
+bignum = {tag = "v0.4.1", git = "https://github.com/noir-lang/noir-bignum"}
+bigcurve = {tag = "v0.5.0", git = "https://github.com/noir-lang/noir_bigcurve"}

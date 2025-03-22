@@ -76,16 +76,16 @@ fn main(
     // Extract TBS data including the sequence tag and length bytes
     // This is critical for correctly validating the certificate hash
     let mut tbs_data: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
-    
+
     // First add the SEQUENCE tag
     tbs_data.push(root_cert.get(tbs_start));
-    
+
     // Then add the length byte(s)
     if (tbs_length_byte & 0x80) != 0 {
         // Long form: add length byte and all subsequent length bytes
         let tbs_length_bytes_count = tbs_length_byte & 0x7F;
         tbs_data.push(tbs_length_byte);
-        
+
         for i in 0..tbs_length_bytes_count {
             if tbs_start + 2 + i as u32 < root_cert.len() {
                 tbs_data.push(root_cert.get(tbs_start + 2 + i as u32));
@@ -95,7 +95,7 @@ fn main(
         // Short form: just add the length byte
         tbs_data.push(tbs_length_byte);
     }
-    
+
     // Then add the actual TBS content
     for i in 0..tbs_length {
         let byte_offset = tbs_data_start + i;
@@ -109,7 +109,7 @@ fn main(
     // Verify TBS data is not empty
     assert(tbs_data.len() > 0);
 
-    let tbs_hash = std::sha256::sha256_var(tbs_data.storage(), tbs_length as u64);
+    let tbs_hash = std::sha256::sha256_var(tbs_data.storage(), tbs_data.len() as u64);
 
     println(tbs_hash);
 }
@@ -264,7 +264,7 @@ fn test_main() {
         6, 3, 85, 29, 15, 1, 1, 255, 4, 4, 3, 2, 1, 6,
     ];
 
-    println (root_cert_tbs.len());
+    println(root_cert_tbs.len());
 
     main(
         root_cert,

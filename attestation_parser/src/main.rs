@@ -80,7 +80,10 @@ fn update_prover_toml(
             let tbs_data = cert.tbs_certificate.as_ref();
 
             // Log TBS data as u8 array
-            println!("\nRoot certificate TBS data (length: {} bytes):", tbs_data.len());
+            println!(
+                "\nRoot certificate TBS data (length: {} bytes):",
+                tbs_data.len()
+            );
             println!("TBS data as u8 array:");
             print!("[");
             for (i, byte) in tbs_data.iter().enumerate() {

@@ -72,8 +72,12 @@ fn update_prover_toml(
         toml_value.insert("root_cert".to_string(), TomlValue::Table(root_cert_table));
     }
 
-    // If root certificate is provided, extract and hash the TBS data
+    // If root certificate is provided, print base64 encoded version and extract/hash TBS data
     if let Some(cert_data) = root_cert {
+        // Print base64 encoded root certificate
+        let base64_cert = base64::encode(cert_data);
+        println!("\nRoot certificate in base64 format:");
+        println!("{}", base64_cert);
         // Parse the certificate to extract TBS data
         if let Ok((_, cert)) = parse_x509_certificate(cert_data) {
             // Get the TBS (To Be Signed) data

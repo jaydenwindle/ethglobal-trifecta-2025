@@ -5,6 +5,277 @@ use bigcurve::curves::secp256r1::Secp256r1Fq;
 pub global MAX_CERT_LENGTH: u32 = 1024;
 pub global MAX_AUTHDATA_LENGTH: u32 = 1024;
 
+struct Certificate {
+    tbs_certificate: BoundedVec<u8, MAX_CERT_LENGTH>,
+    signature_algorithm: BoundedVec<u8, MAX_CERT_LENGTH>,
+    signature_value: BoundedVec<u8, MAX_CERT_LENGTH>,
+}
+
+fn parse_certificate(cert: BoundedVec<u8, MAX_CERT_LENGTH>) -> Certificate {
+    // Ensure certificate starts with SEQUENCE tag (0x30)
+    assert(cert.get(0) == 48);
+
+    // Parse the certificate length according to ASN.1 DER encoding rules
+    let length_byte = cert.get(1);
+    let mut cert_content_start: u32 = 2; // Start position after tag and length byte
+    let mut cert_length: u32 = 0;
+
+    // Check if length is in long form (bit 7 is set)
+    if (length_byte & 0x80) != 0 {
+        // Long form: bits 6-0 encode the number of subsequent length bytes
+        let length_bytes_count = length_byte & 0x7F;
+
+        // Calculate the actual length from subsequent bytes
+        cert_length = 0;
+        for i in 0..length_bytes_count {
+            if 2 + i as u32 < cert.len() {
+                let len_byte = cert.get(2 + i as u32);
+                cert_length = (cert_length << 8) | len_byte as u32;
+            }
+        }
+
+        // Skip over these additional length bytes
+        cert_content_start = cert_content_start + length_bytes_count as u32;
+    } else {
+        // Short form: length byte directly encodes the length
+        cert_length = length_byte as u32;
+    }
+
+    // Ensure the certificate content fits within the certificate
+    assert(cert_content_start + cert_length <= cert.len());
+
+    // TBS Certificate starts at the beginning of the certificate content
+    // It starts with 0x30 (SEQUENCE tag)
+    assert(cert.get(cert_content_start) == 48);
+
+    // Parse TBS Certificate length
+    let tbs_length_byte = cert.get(cert_content_start + 1);
+    let mut tbs_data_start: u32 = cert_content_start + 2; // Default for short form
+    let mut tbs_length: u32 = 0;
+
+    // Check if TBS length is in long form
+    if (tbs_length_byte & 0x80) != 0 {
+        let tbs_length_bytes_count = tbs_length_byte & 0x7F;
+
+        // Calculate the actual length from subsequent bytes
+        tbs_length = 0;
+        for i in 0..tbs_length_bytes_count {
+            if cert_content_start + 2 + i as u32 < cert.len() {
+                let len_byte = cert.get(cert_content_start + 2 + i as u32);
+                tbs_length = (tbs_length << 8) | len_byte as u32;
+            }
+        }
+
+        // Update the start position of TBS data
+        tbs_data_start = cert_content_start + 2 + tbs_length_bytes_count as u32;
+    } else {
+        // Short form: length byte directly encodes the length
+        tbs_length = tbs_length_byte as u32;
+    }
+
+    // Ensure the TBS data fits within the certificate
+    let tbs_end = tbs_data_start + tbs_length;
+    assert(tbs_end <= cert.len());
+
+    // Extract TBS data including the sequence tag and length bytes
+    // This is critical for correctly validating the certificate hash
+    let mut tbs_certificate: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
+
+    // Include the SEQUENCE tag and length bytes in the TBS certificate
+    for i in 0..(tbs_end - cert_content_start) {
+        if cert_content_start + i < cert.len() {
+            tbs_certificate.push(cert.get(cert_content_start + i));
+        }
+    }
+
+    // After TBS comes the signature algorithm
+    let sig_alg_start = tbs_end;
+    assert(sig_alg_start < cert.len());
+    assert(cert.get(sig_alg_start) == 48); // SEQUENCE tag
+    // Parse signature algorithm length
+    let sig_alg_length_byte = cert.get(sig_alg_start + 1);
+    let mut sig_alg_data_start: u32 = sig_alg_start + 2; // Default for short form
+    let mut sig_alg_length: u32 = 0;
+
+    // Check if signature algorithm length is in long form
+    if (sig_alg_length_byte & 0x80) != 0 {
+        let sig_alg_length_bytes_count = sig_alg_length_byte & 0x7F;
+
+        // Calculate the actual length from subsequent bytes
+        sig_alg_length = 0;
+        for i in 0..sig_alg_length_bytes_count {
+            if sig_alg_start + 2 + i as u32 < cert.len() {
+                let len_byte = cert.get(sig_alg_start + 2 + i as u32);
+                sig_alg_length = (sig_alg_length << 8) | len_byte as u32;
+            }
+        }
+
+        // Update the start position of signature algorithm data
+        sig_alg_data_start = sig_alg_start + 2 + sig_alg_length_bytes_count as u32;
+    } else {
+        // Short form: length byte directly encodes the length
+        sig_alg_length = sig_alg_length_byte as u32;
+    }
+
+    // Ensure the signature algorithm data fits within the certificate
+    let sig_alg_end = sig_alg_data_start + sig_alg_length;
+    assert(sig_alg_end <= cert.len());
+
+    // Extract signature algorithm data including the sequence tag and length bytes
+    let mut signature_algorithm: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
+
+    // Include the SEQUENCE tag and length bytes in the signature algorithm
+    for i in 0..(sig_alg_end - sig_alg_start) {
+        if sig_alg_start + i < cert.len() {
+            signature_algorithm.push(cert.get(sig_alg_start + i));
+        }
+    }
+
+    // After signature algorithm comes the signature value
+    let sig_val_start = sig_alg_end;
+    assert(sig_val_start < cert.len());
+    assert(cert.get(sig_val_start) == 3); // BIT STRING tag (0x03)
+    // Parse signature value length
+    let sig_val_length_byte = cert.get(sig_val_start + 1);
+    let mut sig_val_data_start: u32 = sig_val_start + 2; // Default for short form
+    let mut sig_val_length: u32 = 0;
+
+    // Check if signature value length is in long form
+    if (sig_val_length_byte & 0x80) != 0 {
+        let sig_val_length_bytes_count = sig_val_length_byte & 0x7F;
+
+        // Calculate the actual length from subsequent bytes
+        sig_val_length = 0;
+        for i in 0..sig_val_length_bytes_count {
+            if sig_val_start + 2 + i as u32 < cert.len() {
+                let len_byte = cert.get(sig_val_start + 2 + i as u32);
+                sig_val_length = (sig_val_length << 8) | len_byte as u32;
+            }
+        }
+
+        // Update the start position of signature value data
+        sig_val_data_start = sig_val_start + 2 + sig_val_length_bytes_count as u32;
+    } else {
+        // Short form: length byte directly encodes the length
+        sig_val_length = sig_val_length_byte as u32;
+    }
+
+    // Ensure the signature value data fits within the certificate
+    let sig_val_end = sig_val_data_start + sig_val_length;
+    assert(sig_val_end <= cert.len());
+
+    // Extract signature value data including the BIT STRING tag and length bytes
+    let mut signature_value: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
+
+    // Include the BIT STRING tag and length bytes in the signature value
+    for i in 0..(sig_val_end - sig_val_start) {
+        if sig_val_start + i < cert.len() {
+            signature_value.push(cert.get(sig_val_start + i));
+        }
+    }
+
+    Certificate { tbs_certificate, signature_algorithm, signature_value }
+}
+
+// Checks if the bytes of a certificate algorithm match a given OID
+// OID string format example: "1.2.840.10045.4.3.2" for ECDSA with SHA256
+fn check_algorithm_oid(algorithm_bytes: BoundedVec<u8, MAX_CERT_LENGTH>, oid_string: str<100>) -> bool {
+    // Ensure algorithm starts with SEQUENCE tag (0x30)
+    if algorithm_bytes.len() < 2 || algorithm_bytes.get(0) != 48 {
+        return false;
+    }
+    
+    // Skip the SEQUENCE tag and length bytes to get to the OID
+    let length_byte = algorithm_bytes.get(1);
+    let mut oid_start: u32 = 2; // Default position after tag and length byte
+    
+    // Check if length is in long form (bit 7 is set)
+    if (length_byte & 0x80) != 0 {
+        // Long form: bits 6-0 encode the number of subsequent length bytes
+        let length_bytes_count = length_byte & 0x7F;
+        // Skip over these additional length bytes
+        oid_start = oid_start + length_bytes_count as u32;
+    }
+    
+    // The OID should start with OID tag (0x06)
+    if oid_start >= algorithm_bytes.len() || algorithm_bytes.get(oid_start) != 6 {
+        return false;
+    }
+    
+    // Get the length of the OID value
+    let oid_length_byte = algorithm_bytes.get(oid_start + 1);
+    let mut oid_value_start: u32 = oid_start + 2; // Default for short form
+    let mut oid_length: u32 = 0;
+    
+    // Check if OID length is in long form
+    if (oid_length_byte & 0x80) != 0 {
+        let oid_length_bytes_count = oid_length_byte & 0x7F;
+        
+        // Calculate the actual length from subsequent bytes
+        oid_length = 0;
+        for i in 0..oid_length_bytes_count {
+            if oid_start + 2 + i as u32 < algorithm_bytes.len() {
+                let len_byte = algorithm_bytes.get(oid_start + 2 + i as u32);
+                oid_length = (oid_length << 8) | len_byte as u32;
+            }
+        }
+        
+        // Update the start position of OID value
+        oid_value_start = oid_start + 2 + oid_length_bytes_count as u32;
+    } else {
+        // Short form: length byte directly encodes the length
+        oid_length = oid_length_byte as u32;
+    }
+    
+    // Ensure the OID value fits within the algorithm bytes
+    if oid_value_start + oid_length > algorithm_bytes.len() {
+        return false;
+    }
+    
+    // Extract the OID value bytes
+    let mut oid_value: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
+    for i in 0..oid_length {
+        if oid_value_start + i < algorithm_bytes.len() {
+            oid_value.push(algorithm_bytes.get(oid_value_start + i));
+        }
+    }
+    
+    // Convert the OID bytes to a string representation
+    // First two nodes are encoded in the first byte: first_byte = 40*x + y
+    let mut oid_str = "";
+    if oid_value.len() > 0 {
+        let first_byte = oid_value.get(0);
+        let x = first_byte / 40;
+        let y = first_byte % 40;
+        
+        oid_str = format!("{}.{}", x, y);
+        
+        // Process remaining bytes
+        let mut value: u32 = 0;
+        for i in 1..oid_value.len() {
+            let b = oid_value.get(i);
+            
+            // Check if this is a continuation byte (bit 7 is set)
+            if (b & 0x80) != 0 {
+                // This is a multi-byte value
+                value = (value << 7) | (b & 0x7F) as u32;
+            } else {
+                // This is the last byte of the value
+                value = (value << 7) | b as u32;
+                
+                // Append this value to the OID string
+                oid_str = format!("{}.{}", oid_str, value);
+                
+                // Reset for the next value
+                value = 0;
+            }
+        }
+    }
+    
+    // Compare the constructed OID string with the provided one
+    oid_str == oid_string
+}
+
 fn main(
     root_cert: BoundedVec<u8, MAX_CERT_LENGTH>,
     intermediate_cert: BoundedVec<u8, MAX_CERT_LENGTH>,
@@ -18,100 +289,32 @@ fn main(
     assert(leaf_cert.len() > 0);
     assert(auth_data.len() > 0);
 
-    // Parse TBS data from root certificate
-    // X.509 certificates follow ASN.1 DER encoding
-    // The structure is:
-    // Certificate ::= SEQUENCE {
-    //   tbsCertificate       TBSCertificate,
-    //   signatureAlgorithm   AlgorithmIdentifier,
-    //   signatureValue       BIT STRING
-    // }
-    // First byte should be 0x30 (SEQUENCE tag)
-    assert(root_cert.get(0) == 48);
+    // Parse the root certificate into its components
+    let parsed_root_cert = parse_certificate(root_cert);
 
-    // Parse the certificate length according to ASN.1 DER encoding rules
-    let length_byte = root_cert.get(1);
-    let mut tbs_start: u32 = 2; // Start position after tag and length byte
-    // Check if length is in long form (bit 7 is set)
-    if (length_byte & 0x80) != 0 {
-        // Long form: bits 6-0 encode the number of subsequent length bytes
-        let length_bytes_count = length_byte & 0x7F;
-        // Skip over these additional length bytes
-        tbs_start = tbs_start + length_bytes_count as u32;
-    }
-
-    // TBS Certificate starts with 0x30 (SEQUENCE tag)
-    assert(root_cert.get(tbs_start) == 48);
-
-    // Now decode the TBS length
-    let tbs_length_byte = root_cert.get(tbs_start + 1);
-    let mut tbs_length: u32 = 0;
-    let mut tbs_data_start: u32 = tbs_start + 2; // Default for short form
-    // Check if TBS length is in long form
-    if (tbs_length_byte & 0x80) != 0 {
-        let tbs_length_bytes_count = tbs_length_byte & 0x7F;
-
-        // Calculate the actual length from subsequent bytes
-        tbs_length = 0;
-        for i in 0..tbs_length_bytes_count {
-            if tbs_start + 2 + i as u32 < root_cert.len() {
-                let len_byte = root_cert.get(tbs_start + 2 + i as u32);
-                tbs_length = (tbs_length << 8) | len_byte as u32;
-            }
-        }
-
-        // Update the start position of TBS data
-        tbs_data_start = tbs_start + 2 + tbs_length_bytes_count as u32;
-    } else {
-        // Short form: length byte directly encodes the length
-        tbs_length = tbs_length_byte as u32;
-    }
-
-    println(tbs_length);
-
-    // Ensure the TBS data fits within the certificate
-    let tbs_end = tbs_data_start + tbs_length;
-    assert(tbs_end < root_cert.len());
-
-    // Extract TBS data including the sequence tag and length bytes
-    // This is critical for correctly validating the certificate hash
-    let mut tbs_data: BoundedVec<u8, MAX_CERT_LENGTH> = BoundedVec::new();
-
-    // First add the SEQUENCE tag
-    tbs_data.push(root_cert.get(tbs_start));
-
-    // Then add the length byte(s)
-    if (tbs_length_byte & 0x80) != 0 {
-        // Long form: add length byte and all subsequent length bytes
-        let tbs_length_bytes_count = tbs_length_byte & 0x7F;
-        tbs_data.push(tbs_length_byte);
-
-        for i in 0..tbs_length_bytes_count {
-            if tbs_start + 2 + i as u32 < root_cert.len() {
-                tbs_data.push(root_cert.get(tbs_start + 2 + i as u32));
-            }
-        }
-    } else {
-        // Short form: just add the length byte
-        tbs_data.push(tbs_length_byte);
-    }
-
-    // Then add the actual TBS content
-    for i in 0..tbs_length {
-        let byte_offset = tbs_data_start + i;
-        if byte_offset < root_cert.len() {
-            tbs_data.push(root_cert.get(byte_offset));
-        }
-    }
-
-    println(tbs_data);
+    // Print the TBS certificate data
+    println(parsed_root_cert.tbs_certificate);
 
     // Verify TBS data is not empty
-    assert(tbs_data.len() > 0);
+    assert(parsed_root_cert.tbs_certificate.len() > 0);
 
-    let tbs_hash = std::sha256::sha256_var(tbs_data.storage(), tbs_data.len() as u64);
+    // Calculate the hash of the TBS certificate
+    let tbs_hash = std::sha256::sha256_var(
+        parsed_root_cert.tbs_certificate.storage(),
+        parsed_root_cert.tbs_certificate.len() as u64,
+    );
 
+    println(parsed_root_cert.signature_algorithm);
+    println(parsed_root_cert.signature_value);
     println(tbs_hash);
+    
+    // Check if the root certificate uses ECDSA with SHA-384
+    let is_ecdsa_sha384 = check_algorithm_oid(parsed_root_cert.signature_algorithm, "1.2.840.10045.4.3.3");
+    println(is_ecdsa_sha384);
+    
+    // We can also parse the intermediate and leaf certificates if needed
+    // let parsed_intermediate_cert = parse_certificate(intermediate_cert);
+    // let parsed_leaf_cert = parse_certificate(leaf_cert);
 }
 
 #[test]

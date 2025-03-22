@@ -18,28 +18,28 @@ export default async function Home({
         Verify Attestation
       </h1>
       <div className="max-w-screen p-3">
-        <p className="">
+        <p className="font-bold">
           Testament Key:
         </p>
         <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
           {key}
         </pre>
 
-        <p className="mt-2">
+        <p className="font-bold mt-2">
           Attestation:
         </p>
         <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
           {attestation}
         </pre>
 
-        <p className="mt-2">
+        <p className="font-bold mt-2">
           Signature:
         </p>
         <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
           {signature}
         </pre>
 
-        <p className="mt-2">
+        <p className="font-bold mt-2">
           Result:
         </p>
         <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
@@ -67,9 +67,9 @@ export default async function Home({
         </span>
       )}
 
-      {validationResult.attestationValid && validationResult.signatureValid && (
-        <Button className="mt-4">validate onchain</Button>
-      )}
+      {/* {validationResult.attestationValid && validationResult.signatureValid && ( */}
+      {/*   <Button className="mt-4">validate onchain</Button> */}
+      {/* )} */}
 
     </div>
   );

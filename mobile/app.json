@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "testament",
+    "slug": "testament",
+    "scheme": "testament",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +14,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.testament.app",
+      "appleTeamId": "3YM65M954B"
     },
     "android": {
       "adaptiveIcon": {

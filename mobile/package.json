@@ -4,15 +4,26 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5",
+    "@pagopa/io-react-native-integrity": "^0.3.1",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@tamagui/config": "^1.125.26",
+    "@tamagui/lucide-icons": "^1.125.26",
     "expo": "~52.0.40",
+    "expo-clipboard": "~7.0.1",
+    "expo-linking": "~7.0.5",
     "expo-status-bar": "~2.0.1",
     "react": "18.3.1",
-    "react-native": "0.76.7"
+    "react-native": "0.76.7",
+    "react-native-gesture-handler": "~2.20.2",
+    "react-native-reanimated": "~3.16.1",
+    "react-native-svg": "15.8.0",
+    "tamagui": "^1.125.26"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

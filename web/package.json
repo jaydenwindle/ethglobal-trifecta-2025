@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@peculiar/x509": "^1.12.3",
     "@radix-ui/react-slot": "^1.1.2",
     "appattest-checker-node": "^1.0.3",
     "class-variance-authority": "^0.7.1",

@@ -1,0 +1,13 @@
+@ensdomains/buffer/=lib/NitroProver/lib/buffer/
+@solarity/=lib/nitro-validator/lib/solidity-lib/contracts/
+NitroProver/=lib/NitroProver/
+P384/=lib/NitroProver/lib/P384/contracts/
+SolSha2Ext/=lib/NitroProver/lib/SolSha2Ext/contracts/
+buffer/=lib/NitroProver/lib/buffer/contracts/
+forge-std/=lib/forge-std/src/
+marlinprotocol/P384/=lib/NitroProver/lib/P384/contracts/
+marlinprotocol/SolSha2Ext/=lib/NitroProver/lib/SolSha2Ext/contracts/lib/
+marlinprotocol/solidity-cbor/=lib/NitroProver/lib/solidity-cbor/packages/solidity-cbor/contracts/
+nitro-validator/=lib/nitro-validator/src/
+solidity-cbor/=lib/NitroProver/lib/solidity-cbor/
+solidity-lib/=lib/nitro-validator/lib/solidity-lib/contracts/

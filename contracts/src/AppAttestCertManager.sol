@@ -29,12 +29,18 @@ contract AppAttestCertManager is Curve384 {
     // @dev Sig algo is hardcoded here because the root cerificate's sig algorithm is known beforehand
     // @dev reference article for encoding https://learn.microsoft.com/en-in/windows/win32/seccertenroll/about-object-identifier
     bytes public constant CERT_ALGO_OID = hex"06082a8648ce3d040303";
+    // OID 1.2.840.10045.4.3.2 represents {iso(1) member-body(2) us(840) ansi-x962(10045) signatures(4) ecdsa-with-SHA2(3) ecdsa-with-SHA256(3)}
+    // which essentially means the signature algorithm is Elliptic curve Digital Signature Algorithm (DSA) coupled with the Secure Hash Algorithm 256 (SHA256) algorithm
+    // @dev Sig algo is hardcoded here because the root cerificate's sig algorithm is known beforehand
+    // @dev reference article for encoding https://learn.microsoft.com/en-in/windows/win32/seccertenroll/about-object-identifier
+    bytes public constant CERT_ALGO_OID_256 = hex"06082a8648ce3d040302";
     // https://oid-rep.orange-labs.fr/get/1.2.840.10045.2.1
     // 1.2.840.10045.2.1 {iso(1) member-body(2) us(840) ansi-x962(10045) keyType(2) ecPublicKey(1)} represents Elliptic curve public key cryptography
     bytes public constant EC_PUB_KEY_OID = hex"2a8648ce3d0201";
     // https://oid-rep.orange-labs.fr/get/1.3.132.0.34
     // 1.3.132.0.34 {iso(1) identified-organization(3) certicom(132) curve(0) ansip384r1(34)} represents NIST 384-bit elliptic curve
     bytes public constant SECP_384_R1_OID = hex"2b81040022";
+    bytes public constant SECP_256_R1_OID = hex"2a8648ce3d030107";
 
     // certHash -> pub key that verified cert
     mapping(bytes32 => bytes) public verifiedBy;
@@ -91,17 +97,46 @@ contract AppAttestCertManager is Curve384 {
         // TODO: extract and check issuer and subject hash
         bytes memory pubKey = _parseTbs(certificate, tbsCertPtr);
         if (parentPubKey.length == 0 && certHash == ROOT_CA_CERT_HASH) return pubKey;
+
+        console2.log(certificate.length, tbsCertPtr);
         bytes memory tbs = certificate.allBytesAt(tbsCertPtr);
+
         uint256 sigAlgoPtr = certificate.nextSiblingOf(tbsCertPtr);
-        require(keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID), "invalid cert sig algo");
 
-        bytes memory sigPacked = packSig(certificate, sigAlgoPtr);
+        require(
+            keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID)
+                || keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID_256),
+            "invalid cert sig algo"
+        );
 
-        verifyES384WithSHA384(parentPubKey, tbs, sigPacked);
+        console2.log("here");
+
+        if (keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID)) {
+            bytes memory sigPacked = packSig384(certificate, sigAlgoPtr);
+            verifyES384WithSHA384(parentPubKey, tbs, sigPacked);
+        } else if (keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID_256)) {
+            bytes memory sigPacked = packSig256(certificate, sigAlgoPtr);
+            verifyES256WithSHA256(parentPubKey, tbs, sigPacked);
+        } else {
+            require(false, "invalid cert sig algo");
+        }
+
         return pubKey;
     }
 
-    function packSig(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
+    function packSig256(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
+        uint256 sigPtr = certificate.nextSiblingOf(sigAlgoPtr);
+        bytes memory sig = certificate.bitstringAt(sigPtr);
+        uint256 sigRoot = sig.root();
+        uint256 sigXPtr = sig.firstChildOf(sigRoot);
+        bytes memory sigX = sig.uintBytesAt(sigXPtr);
+        uint256 sigYPtr = sig.nextSiblingOf(sigXPtr);
+        bytes memory sigY = sig.uintBytesAt(sigYPtr);
+
+        return abi.encodePacked(sigX, sigY);
+    }
+
+    function packSig384(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
         uint256 sigPtr = certificate.nextSiblingOf(sigAlgoPtr);
         bytes memory sig = certificate.bitstringAt(sigPtr);
         uint256 sigRoot = sig.root();
@@ -131,7 +166,11 @@ contract AppAttestCertManager is Curve384 {
         // TODO: are there any checks on serialPtr other than being +ve?
 
         uint256 sigAlgoPtr = certificate.nextSiblingOf(serialPtr);
-        require(keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID), "invalid cert sig algo");
+        require(
+            keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID)
+                || keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID_256),
+            "invalid cert sig algo"
+        );
 
         pubKey = _parseTbs2(certificate, sigAlgoPtr);
     }
@@ -165,8 +204,11 @@ contract AppAttestCertManager is Curve384 {
         require(keccak256(certificate.bytesAt(pubKeyAlgoIdPtr)) == keccak256(EC_PUB_KEY_OID), "Cert Algo id Incorrect");
 
         uint256 algoParamsPtr = certificate.nextSiblingOf(pubKeyAlgoIdPtr);
+        console2.logBytes(certificate.bytesAt(algoParamsPtr));
         require(
-            keccak256(certificate.bytesAt(algoParamsPtr)) == keccak256(SECP_384_R1_OID), "Cert algo param incorrect"
+            keccak256(certificate.bytesAt(algoParamsPtr)) == keccak256(SECP_384_R1_OID)
+                || keccak256(certificate.bytesAt(algoParamsPtr)) == keccak256(SECP_256_R1_OID),
+            "Cert algo param incorrect"
         );
 
         uint256 subjectPublicKeyPtr = certificate.nextSiblingOf(pubKeyAlgoPtr);
@@ -210,6 +252,20 @@ contract AppAttestCertManager is Curve384 {
             verify(pub, uint256(bytes32(abi.encodePacked(bytes16(0), mhi))), uint256(mlo), rhi, rlo, shi, slo),
             "invalid sig"
         );
+    }
+
+    function verifyES256WithSHA256(bytes memory pk, bytes memory message, bytes memory sig) internal view {
+        console2.log(pk.length);
+        console2.log(sig.length);
+        // require(pk.length == 97, "invalid pub key length");
+        // require(sig.length == 96, "invalid sig length");
+        // (bytes16 mhi, bytes32 mlo) = Sha2Ext.sha384(message);
+        // C384Elm memory pub = _parsePubKey(pk);
+        // (uint256 rhi, uint256 rlo, uint256 shi, uint256 slo) = _parseSig(sig);
+        // require(
+        //     verify(pub, uint256(bytes32(abi.encodePacked(bytes16(0), mhi))), uint256(mlo), rhi, rlo, shi, slo),
+        //     "invalid sig"
+        // );
     }
 
     function _parsePubKey(bytes memory pk) private pure returns (C384Elm memory pub) {

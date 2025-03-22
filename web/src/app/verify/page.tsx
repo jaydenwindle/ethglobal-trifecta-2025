@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button"
+import { Check, X } from 'lucide-react';
+
 
 import { validateAttetsationAndSignature } from "../actions";
 
@@ -46,27 +48,27 @@ export default async function Home({
       </div>
 
       {validationResult.attestationValid ? (
-        <p className="text-green-600">
-          Hardware attestation verified
-        </p>
+        <span className="text-green-600 flex justify-center items-center">
+          <Check /> hardware attestation verified
+        </span>
       ) : (
-        <p className="text-red-600">
-          Invalid hardware attestation
-        </p>
+        <span className="text-red-600 flex justify-center items-center">
+          <X /> invalid hardware attestation
+        </span>
       )}
 
       {validationResult.signatureValid ? (
-        <p className="text-green-600">
-          signature verified
-        </p>
+        <span className="text-green-600 flex justify-center items-center">
+          <Check /> signature verified
+        </span>
       ) : (
-        <p className="text-red-600">
-          invalid signature
-        </p>
+        <span className="text-red-600 flex justify-center items-center">
+          <X /> invalid signature
+        </span>
       )}
 
       {validationResult.attestationValid && validationResult.signatureValid && (
-        <Button>validate onchain</Button>
+        <Button className="mt-4">validate onchain</Button>
       )}
 
     </div>

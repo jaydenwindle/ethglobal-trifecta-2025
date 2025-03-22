@@ -54,8 +54,6 @@ export async function validateAttetsationAndSignature(
 
   const signatureValid = true
 
-
-
   console.log(attestationResult)
 
   return { attestationValid, signatureValid }

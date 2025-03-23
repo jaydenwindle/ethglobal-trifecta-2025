@@ -30,7 +30,7 @@ contract AppAttestCertManager is Curve384 {
         bytes parentPubKey
     );
 
-    event SignedDataVerified(bytes32 indexed certHash, bytes certPubKey, bytes32 messageHash, bytes32 r, bytes32 s);
+    event SignedDataVerified(bytes32 indexed certHash, bytes certPubKey, bytes message, bytes32 r, bytes32 s);
 
     error SignedDataInvalid();
 
@@ -67,7 +67,7 @@ contract AppAttestCertManager is Curve384 {
         certPubKey[ROOT_CA_CERT_HASH] = _verifyCert(ROOT_CA_CERT, emptyPubKey);
     }
 
-    function verifyP256SignedData(bytes32 certHash, bytes32 messageHash, bytes32 r, bytes32 s) external {
+    function verifyP256SignedData(bytes32 certHash, bytes calldata message, bytes32 r, bytes32 s) external {
         bytes memory pubKey = certPubKey[certHash];
         // The uncompressed public key should be 65 bytes: 1-byte prefix + 32-byte x + 32-byte y.
         require(pubKey.length == 65, "Invalid public key length");
@@ -83,15 +83,13 @@ contract AppAttestCertManager is Curve384 {
             y := mload(add(pubKey, 0x41))
         }
 
-        console2.logBytes32(messageHash);
-
-        bool valid = P256.verifySignature(messageHash, r, s, x, y);
+        bool valid = P256.verifySignature(sha256(message), r, s, x, y);
 
         if (!valid) {
             revert SignedDataInvalid();
         }
 
-        emit SignedDataVerified(certHash, pubKey, messageHash, r, s);
+        emit SignedDataVerified(certHash, pubKey, message, r, s);
     }
 
     function verifyCert(bytes memory certificate, bytes32 parentCertHash) external {

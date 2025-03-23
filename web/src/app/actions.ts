@@ -12,6 +12,17 @@ import { privateKeyToAccount } from "viem/accounts";
 import { createPublicClient, http } from 'viem'
 import { base } from 'viem/chains'
 import { appAttestCertManagerAbi } from "@/generated";
+import asn1 from "asn1.js"
+
+const ECDSASignature = asn1.define('ECDSASignature', function () {
+  // @ts-expect-error ignore
+  this.seq().obj(
+    // @ts-expect-error ignore
+    this.key('r').int(),
+    // @ts-expect-error ignore
+    this.key('s').int()
+  );
+});
 
 const RPC_URL = "http://127.0.0.1:8545"
 
@@ -66,41 +77,12 @@ function parseDerSignature(derSignatureHex: string) {
   // Convert the hex string to a Buffer
   const derBuffer = Buffer.from(derSignatureHex, 'hex');
 
-  // Ensure the first byte is 0x30 (DER sequence tag)
-  if (derBuffer[0] !== 0x30) {
-    throw new Error('Invalid DER signature: missing sequence tag');
+  const decoded = ECDSASignature.decode(derBuffer, 'der');
+
+  return {
+    r: `0x${decoded.r.toString(16)}`,
+    s: `0x${decoded.s.toString(16)}`
   }
-
-  let offset = 1; // Start after the sequence tag
-
-  // The next byte is the total length of the sequence; we can skip it
-  // const sequenceLength = derBuffer[offset];
-  offset++;
-
-  // Parse the first integer (r)
-  if (derBuffer[offset] !== 0x02) {
-    throw new Error('Invalid DER signature: missing integer tag for r');
-  }
-  offset++;
-  const rLength = derBuffer[offset];
-  offset++;
-  const rBuffer = derBuffer.slice(offset, offset + rLength);
-  offset += rLength;
-
-  // Parse the second integer (s)
-  if (derBuffer[offset] !== 0x02) {
-    throw new Error('Invalid DER signature: missing integer tag for s');
-  }
-  offset++;
-  const sLength = derBuffer[offset];
-  offset++;
-  const sBuffer = derBuffer.slice(offset, offset + sLength);
-
-  // Convert r and s to hexadecimal strings
-  const rHex = rBuffer.toString('hex');
-  const sHex = sBuffer.toString('hex');
-
-  return { r: `0x${rHex}` as Hex, s: `0x${sHex}` as Hex }
 }
 
 

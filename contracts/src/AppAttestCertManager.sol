@@ -9,9 +9,9 @@ import {Curve384} from "marlinprotocol/P384/Curve384.sol";
 import {Sha2Ext} from "marlinprotocol/SolSha2Ext/Sha2Ext.sol";
 import {LibBytes} from "marlinprotocol/SolSha2Ext/LibBytes.sol";
 import {ByteParser} from "marlinprotocol/solidity-cbor/ByteParser.sol";
-import {Asn1Decode} from "NitroProver/src/lib/Asn1Decode.sol";
+import {Asn1Decode} from "./lib/Asn1Decode.sol";
 import {DateTimeLibrary} from "NitroProver/src/lib/DateTimeLibrary.sol";
-import {BytesUtils} from "NitroProver/src/lib/BytesUtils.sol";
+import {BytesUtils} from "./lib/BytesUtils.sol";
 
 // @notice forked from NitroProver to override root CA vars
 // @title AppAttestCertManager
@@ -96,9 +96,9 @@ contract AppAttestCertManager is Curve384 {
         uint256 tbsCertPtr = certificate.firstChildOf(root);
         // TODO: extract and check issuer and subject hash
         bytes memory pubKey = _parseTbs(certificate, tbsCertPtr);
+        console2.logBytes(pubKey);
         if (parentPubKey.length == 0 && certHash == ROOT_CA_CERT_HASH) return pubKey;
 
-        console2.log(certificate.length, tbsCertPtr);
         bytes memory tbs = certificate.allBytesAt(tbsCertPtr);
 
         uint256 sigAlgoPtr = certificate.nextSiblingOf(tbsCertPtr);
@@ -109,14 +109,12 @@ contract AppAttestCertManager is Curve384 {
             "invalid cert sig algo"
         );
 
-        console2.log("here");
+        bytes memory sigPacked = packSig(certificate, sigAlgoPtr);
 
         if (keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID)) {
-            bytes memory sigPacked = packSig384(certificate, sigAlgoPtr);
             verifyES384WithSHA384(parentPubKey, tbs, sigPacked);
         } else if (keccak256(certificate.bytesAt(sigAlgoPtr)) == keccak256(CERT_ALGO_OID_256)) {
-            bytes memory sigPacked = packSig256(certificate, sigAlgoPtr);
-            verifyES256WithSHA256(parentPubKey, tbs, sigPacked);
+            verifyES384WithSHA256(parentPubKey, tbs, sigPacked);
         } else {
             require(false, "invalid cert sig algo");
         }
@@ -124,19 +122,7 @@ contract AppAttestCertManager is Curve384 {
         return pubKey;
     }
 
-    function packSig256(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
-        uint256 sigPtr = certificate.nextSiblingOf(sigAlgoPtr);
-        bytes memory sig = certificate.bitstringAt(sigPtr);
-        uint256 sigRoot = sig.root();
-        uint256 sigXPtr = sig.firstChildOf(sigRoot);
-        bytes memory sigX = sig.uintBytesAt(sigXPtr);
-        uint256 sigYPtr = sig.nextSiblingOf(sigXPtr);
-        bytes memory sigY = sig.uintBytesAt(sigYPtr);
-
-        return abi.encodePacked(sigX, sigY);
-    }
-
-    function packSig384(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
+    function packSig(bytes memory certificate, uint256 sigAlgoPtr) internal pure returns (bytes memory) {
         uint256 sigPtr = certificate.nextSiblingOf(sigAlgoPtr);
         bytes memory sig = certificate.bitstringAt(sigPtr);
         uint256 sigRoot = sig.root();
@@ -181,8 +167,6 @@ contract AppAttestCertManager is Curve384 {
 
         uint256 validityPtr = certificate.nextSiblingOf(issuerPtr);
         uint256 notBeforePtr = certificate.firstChildOf(validityPtr);
-        console2.log(yymmddhhmmssTots(certificate.bytesAt(notBeforePtr)));
-        console2.log(block.timestamp);
         require(yymmddhhmmssTots(certificate.bytesAt(notBeforePtr)) <= block.timestamp, "certificate not valid yet");
         uint256 notAfterPtr = certificate.nextSiblingOf(notBeforePtr);
         require(yymmddhhmmssTots(certificate.bytesAt(notAfterPtr)) >= block.timestamp, "certificate not valid anymore");
@@ -204,7 +188,6 @@ contract AppAttestCertManager is Curve384 {
         require(keccak256(certificate.bytesAt(pubKeyAlgoIdPtr)) == keccak256(EC_PUB_KEY_OID), "Cert Algo id Incorrect");
 
         uint256 algoParamsPtr = certificate.nextSiblingOf(pubKeyAlgoIdPtr);
-        console2.logBytes(certificate.bytesAt(algoParamsPtr));
         require(
             keccak256(certificate.bytesAt(algoParamsPtr)) == keccak256(SECP_384_R1_OID)
                 || keccak256(certificate.bytesAt(algoParamsPtr)) == keccak256(SECP_256_R1_OID),
@@ -254,18 +237,13 @@ contract AppAttestCertManager is Curve384 {
         );
     }
 
-    function verifyES256WithSHA256(bytes memory pk, bytes memory message, bytes memory sig) internal view {
-        console2.log(pk.length);
-        console2.log(sig.length);
-        // require(pk.length == 97, "invalid pub key length");
-        // require(sig.length == 96, "invalid sig length");
-        // (bytes16 mhi, bytes32 mlo) = Sha2Ext.sha384(message);
-        // C384Elm memory pub = _parsePubKey(pk);
-        // (uint256 rhi, uint256 rlo, uint256 shi, uint256 slo) = _parseSig(sig);
-        // require(
-        //     verify(pub, uint256(bytes32(abi.encodePacked(bytes16(0), mhi))), uint256(mlo), rhi, rlo, shi, slo),
-        //     "invalid sig"
-        // );
+    function verifyES384WithSHA256(bytes memory pk, bytes memory message, bytes memory sig) internal view {
+        require(pk.length == 97, "invalid pub key length");
+        require(sig.length == 96, "invalid sig length");
+        bytes32 digest = sha256(message);
+        C384Elm memory pub = _parsePubKey(pk);
+        (uint256 rhi, uint256 rlo, uint256 shi, uint256 slo) = _parseSig(sig);
+        require(verify(pub, 0, uint256(digest), rhi, rlo, shi, slo), "invalid sig");
     }
 
     function _parsePubKey(bytes memory pk) private pure returns (C384Elm memory pub) {

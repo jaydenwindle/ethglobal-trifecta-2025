@@ -76,14 +76,14 @@ export default async function Home({
             <Check /> verified onchain
           </span>
           {validationResult.transactions.map((txHash, index) => (
-            <>
-              <p className="font-bold">
+            <span key={txHash} className="max-w-screen p-3">
+              <p className="font-bold" >
                 Transaction {index + 1}:
               </p>
-              <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-3">
+              <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                 {txHash}
               </pre>
-            </>
+            </span>
           ))}
         </>
       )}

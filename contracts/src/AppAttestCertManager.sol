@@ -86,7 +86,7 @@ contract AppAttestCertManager is Curve384 {
         console2.logBytes32(x);
         console2.logBytes32(y);
 
-        bool valid = P256.verifySignature(sha256(message), r, s, x, y);
+        bool valid = P256.verifySignatureAllowMalleability(sha256(message), r, s, x, y);
 
         if (!valid) {
             revert SignedDataInvalid();

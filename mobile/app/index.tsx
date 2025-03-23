@@ -19,20 +19,23 @@ export default function App() {
       <YStack flex={1} alignItems='center' justifyContent='center' gap="$3" paddingHorizontal="$3">
         <H3 fontWeight="600">TESTAMENT</H3>
         <Text>The TEE that lives in your pocket</Text>
-        {key && (
-          <YStack gap="$3" marginTop="$6">
-            <Text fontWeight="600">Testament Key:</Text>
-            <Text numberOfLines={1}>{key}</Text>
-            <Button icon={Copy} fontWeight="600" onPress={() => Clipboard.setStringAsync(key)}>Copy</Button>
-          </YStack>
-        )}
-        {attestation && (
-          <YStack gap="$3" marginTop="$3">
-            <Text fontWeight="600">Key Attestation:</Text>
-            <Text numberOfLines={1}>{attestation}</Text>
-            <Button icon={Copy} fontWeight="600" onPress={() => Clipboard.setStringAsync(attestation)}>Copy</Button>
-          </YStack>
-        )}
+        <YStack gap="$3" marginTop="$6">
+
+          {key && (
+            <>
+              <Text fontWeight="600">Testament Key:</Text>
+              <Text numberOfLines={1}>{key}</Text>
+              <Button icon={Copy} fontWeight="600" onPress={() => Clipboard.setStringAsync(key)}>Copy</Button>
+            </>
+          )}
+          {attestation && (
+            <>
+              <Text fontWeight="600">Key Attestation:</Text>
+              <Text numberOfLines={1}>{attestation}</Text>
+              <Button icon={Copy} fontWeight="600" onPress={() => Clipboard.setStringAsync(attestation)}>Copy</Button>
+            </>
+          )}
+        </YStack>
         {key && attestation && (
           <XStack alignItems="center" marginTop="$6" backgroundColor="$green3" paddingHorizontal="$4" paddingVertical="$3" borderRadius="$10">
             <BadgeCheck marginRight="$2" color={"green"} />

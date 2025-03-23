@@ -2,11 +2,23 @@ import { createTamagui, TamaguiProvider, View, Text, Button, H3, YStack, TextAre
 import { useLocalSearchParams, useGlobalSearchParams, Link, Redirect, useRouter } from 'expo-router';
 import { FileSignature } from "@tamagui/lucide-icons"
 import * as Linking from 'expo-linking';
+import { start, StartParams } from 'react-native-helios';
+import { ethers } from 'ethers';
+import { getHeliosProvider, fallbackCheckpoint, Network } from 'react-native-helios';
+
+import { createPublicClient, GetBlockParameters, http } from 'viem'
+import { mainnet } from 'viem/chains'
+
+const publicClient = createPublicClient({
+  chain: mainnet,
+  transport: http()
+})
+
 
 import { useHardwareKey } from "../hooks/useHardwareKey";
 
 const programs = {
-  'fibbonaci': (input: string) => {
+  'fibbonaci': async (input: string) => {
     const n = parseInt(input, 10);
     if (isNaN(n) || n < 0) return "Invalid input";
 
@@ -25,7 +37,10 @@ const programs = {
 
     return b.toString();
   },
-  'eth-get-block': (input: string) => "0x..."
+  'eth-get-block': async (input: string) => {
+    const block = await publicClient.getBlock(input as GetBlockParameters)
+    return block.hash
+  }
 }
 
 export default function Attest() {
@@ -72,9 +87,9 @@ export default function Attest() {
           if (!queryParams?.callbackUrl || !queryParams.program || !queryParams.input) return;
 
           const program = programs[queryParams.program as keyof typeof programs]
-          console.log(program)
-          const data = program(queryParams.input as string)
-          console.log(data)
+          console.log("here", program)
+          const data = await program(queryParams.input as string)
+          console.log("data", data)
           const signature = await sign(data);
 
           if (!key || !attestation || !signature) return;

@@ -13,7 +13,8 @@ import {Asn1Decode} from "./lib/Asn1Decode.sol";
 import {DateTimeLibrary} from "NitroProver/src/lib/DateTimeLibrary.sol";
 import {BytesUtils} from "./lib/BytesUtils.sol";
 
-// @notice forked from NitroProver to override root CA vars
+// jw - forked from NitroProver to override root CA vars and add suppot for AppAttest certs
+
 // @title AppAttestCertManager
 // @notice Allows verification of AppAttest in Solidity
 contract AppAttestCertManager is Curve384 {

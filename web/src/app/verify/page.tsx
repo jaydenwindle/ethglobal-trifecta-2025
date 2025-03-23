@@ -3,14 +3,15 @@ import { Check, X } from 'lucide-react';
 
 
 import { validateAttetsationAndSignature } from "../actions";
+import { SearchParams } from "next/dist/server/request/search-params";
 
 export default async function Home({
   searchParams
-}) {
+}: { searchParams: Promise<SearchParams> }) {
 
   const { key, attestation, signature, result } = await searchParams
 
-  const validationResult = await validateAttetsationAndSignature({ key, attestation, signature, result });
+  const validationResult = await validateAttetsationAndSignature({ key: key as string, attestation: attestation as string, signature: signature as string, result: result as string });
 
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-2">
@@ -67,9 +68,9 @@ export default async function Home({
         </span>
       )}
 
-      {/* {validationResult.attestationValid && validationResult.signatureValid && ( */}
-      {/*   <Button className="mt-4">validate onchain</Button> */}
-      {/* )} */}
+      {validationResult.attestationValid && validationResult.signatureValid && (
+        <Button className="mt-4">validate onchain</Button>
+      )}
 
     </div>
   );

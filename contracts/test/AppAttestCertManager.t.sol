@@ -20,5 +20,14 @@ contract CounterTest is Test {
 
         certManager.verifyCert(intermediate_cert, certManager.ROOT_CA_CERT_HASH());
         certManager.verifyCert(leaf_cert, keccak256(intermediate_cert));
+
+        bytes32 r = 0x44f4a2b756fa975aed6c882d5d59fe4e0b45063e97c9eba7043d290931392a5c;
+        bytes32 s = 0x1287ea43ebc33f59c52f197e2ad8a2bcdb54dc25a1e48db600197625ca9bdb83;
+
+        console.logBytes(certManager.certPubKey(keccak256(leaf_cert)));
+
+        certManager.verifyP256SignedData(
+            keccak256(leaf_cert), sha256(hex"3f1fc5d114238cc618ca7036cc2d0a28cdc14afacadebdc9cef1c818b633345f"), r, s
+        );
     }
 }

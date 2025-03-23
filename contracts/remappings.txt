@@ -11,3 +11,4 @@ marlinprotocol/solidity-cbor/=lib/NitroProver/lib/solidity-cbor/packages/solidit
 nitro-validator/=lib/nitro-validator/src/
 solidity-cbor/=lib/NitroProver/lib/solidity-cbor/
 solidity-lib/=lib/nitro-validator/lib/solidity-lib/contracts/
+solady/=lib/solady/src/

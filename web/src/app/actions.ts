@@ -4,6 +4,7 @@ import { verifyAttestation, verifyAssertion } from "appattest-checker-node"
 import { parseAttestation, ParsedAttestation } from "appattest-checker-node/dist/attestation"
 import { X509Certificate } from '@peculiar/x509';
 import { createHash } from "node:crypto"
+import { parseAssertion, ParsedAssertion } from "appattest-checker-node/dist/assertion";
 
 const DEFAULT_APPATTEST_ROOT_CERT_PEM = `
 -----BEGIN CERTIFICATE-----
@@ -62,9 +63,25 @@ export async function validateAttetsationAndSignature(
 
   const attestationValid = true
 
+  console.log(attestationResult.publicKeyPem);
+
   const clientDataHash = createHash('sha256').update(result).digest()
 
   console.log(result, clientDataHash)
+
+  const parsedAssertion = await parseAssertion(Buffer.from(signature, "base64")) as ParsedAssertion;
+  console.log('signature', parsedAssertion.signature.toString('hex'))
+
+  console.log("message", Buffer.concat([
+    parsedAssertion.authData,
+    clientDataHash,
+  ]).toString('hex'))
+
+  console.log("message hash",
+    createHash('sha256').update(Buffer.concat([
+      parsedAssertion.authData,
+      clientDataHash,
+    ])).digest().toString('hex'))
 
   const assertionResult = await verifyAssertion(
     clientDataHash,

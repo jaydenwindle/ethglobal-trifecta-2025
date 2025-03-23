@@ -13,12 +13,26 @@ import {Asn1Decode} from "./lib/Asn1Decode.sol";
 import {DateTimeLibrary} from "NitroProver/src/lib/DateTimeLibrary.sol";
 import {BytesUtils} from "./lib/BytesUtils.sol";
 
+import {P256} from "solady/utils/P256.sol";
+
 // jw - forked from NitroProver to override root CA vars and add suppot for AppAttest certs
 
 // @title AppAttestCertManager
 // @notice Allows verification of AppAttest in Solidity
 contract AppAttestCertManager is Curve384 {
     using Asn1Decode for bytes;
+
+    event CertificateVerified(
+        bytes32 indexed certHash,
+        bytes certificate,
+        bytes certPubKey,
+        bytes32 indexed parentCertHash,
+        bytes parentPubKey
+    );
+
+    event SignedDataVerified(bytes32 indexed certHash, bytes certPubKey, bytes32 messageHash, bytes32 r, bytes32 s);
+
+    error SignedDataInvalid();
 
     // @dev download the root CA cert for Apple AppAttest from https://www.apple.com/certificateauthority/Apple_App_Attestation_Root_CA.pem
     // @dev convert the base64 encoded pub key into hex to get the cert below
@@ -53,13 +67,32 @@ contract AppAttestCertManager is Curve384 {
         certPubKey[ROOT_CA_CERT_HASH] = _verifyCert(ROOT_CA_CERT, emptyPubKey);
     }
 
-    event CertificateVerified(
-        bytes32 indexed certHash,
-        bytes certificate,
-        bytes certPubKey,
-        bytes32 indexed parentCertHash,
-        bytes parentPubKey
-    );
+    function verifyP256SignedData(bytes32 certHash, bytes32 messageHash, bytes32 r, bytes32 s) external {
+        bytes memory pubKey = certPubKey[certHash];
+        // The uncompressed public key should be 65 bytes: 1-byte prefix + 32-byte x + 32-byte y.
+        require(pubKey.length == 65, "Invalid public key length");
+        require(pubKey[0] == 0x04, "Invalid public key prefix");
+
+        bytes32 x;
+        bytes32 y;
+
+        assembly {
+            // Load 32 bytes starting at offset 33 (0x20 + 1) for x
+            x := mload(add(pubKey, 0x21))
+            // Load 32 bytes starting at offset 65 (0x20 + 33) for y
+            y := mload(add(pubKey, 0x41))
+        }
+
+        console2.logBytes32(messageHash);
+
+        bool valid = P256.verifySignature(messageHash, r, s, x, y);
+
+        if (!valid) {
+            revert SignedDataInvalid();
+        }
+
+        emit SignedDataVerified(certHash, pubKey, messageHash, r, s);
+    }
 
     function verifyCert(bytes memory certificate, bytes32 parentCertHash) external {
         bytes memory parentPubKey = certPubKey[parentCertHash];

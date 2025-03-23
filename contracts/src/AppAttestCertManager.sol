@@ -83,6 +83,9 @@ contract AppAttestCertManager is Curve384 {
             y := mload(add(pubKey, 0x41))
         }
 
+        console2.logBytes32(x);
+        console2.logBytes32(y);
+
         bool valid = P256.verifySignature(sha256(message), r, s, x, y);
 
         if (!valid) {

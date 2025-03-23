@@ -5,6 +5,31 @@ import { parseAttestation, ParsedAttestation } from "appattest-checker-node/dist
 import { X509Certificate } from '@peculiar/x509';
 import { createHash } from "node:crypto"
 import { parseAssertion, ParsedAssertion } from "appattest-checker-node/dist/assertion";
+import { createWalletClient, Hex, keccak256, sha256, stringToHex, toBytes } from 'viem'
+
+import { createPublicKey } from "node:crypto";
+import { privateKeyToAccount } from "viem/accounts";
+import { createPublicClient, http } from 'viem'
+import { base } from 'viem/chains'
+import { appAttestCertManagerAbi } from "@/generated";
+
+const RPC_URL = "http://127.0.0.1:8545"
+
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http(RPC_URL)
+})
+
+
+const appattestCertManagerAddress = "0x834Ea01e45F9b5365314358159d92d134d89feEb";
+
+const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+
+const walletClient = createWalletClient({
+  account,
+  chain: base,
+  transport: http(RPC_URL)
+})
 
 const DEFAULT_APPATTEST_ROOT_CERT_PEM = `
 -----BEGIN CERTIFICATE-----
@@ -23,6 +48,62 @@ oyFraWVIyd/dganmrduC1bmTBGwD
 -----END CERTIFICATE-----
 `;
 
+const ROOT_CA_CERT_HASH = "0xb3554a4b86e13b3b6c08fe3fee3398e5d15886200014bf61ef4da90026955526"
+
+// Function to convert a base64url string to hexadecimal
+function base64UrlToHex(base64url: string) {
+  // Replace base64url specific characters with base64 equivalents
+  let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  // Pad with '=' characters if necessary
+  while (base64.length % 4 !== 0) {
+    base64 += '=';
+  }
+  return Buffer.from(base64, 'base64').toString('hex');
+}
+
+function parseDerSignature(derSignatureHex: string) {
+  console.log(derSignatureHex);
+  // Convert the hex string to a Buffer
+  const derBuffer = Buffer.from(derSignatureHex, 'hex');
+
+  // Ensure the first byte is 0x30 (DER sequence tag)
+  if (derBuffer[0] !== 0x30) {
+    throw new Error('Invalid DER signature: missing sequence tag');
+  }
+
+  let offset = 1; // Start after the sequence tag
+
+  // The next byte is the total length of the sequence; we can skip it
+  // const sequenceLength = derBuffer[offset];
+  offset++;
+
+  // Parse the first integer (r)
+  if (derBuffer[offset] !== 0x02) {
+    throw new Error('Invalid DER signature: missing integer tag for r');
+  }
+  offset++;
+  const rLength = derBuffer[offset];
+  offset++;
+  const rBuffer = derBuffer.slice(offset, offset + rLength);
+  offset += rLength;
+
+  // Parse the second integer (s)
+  if (derBuffer[offset] !== 0x02) {
+    throw new Error('Invalid DER signature: missing integer tag for s');
+  }
+  offset++;
+  const sLength = derBuffer[offset];
+  offset++;
+  const sBuffer = derBuffer.slice(offset, offset + sLength);
+
+  // Convert r and s to hexadecimal strings
+  const rHex = rBuffer.toString('hex');
+  const sHex = sBuffer.toString('hex');
+
+  return { r: `0x${rHex}` as Hex, s: `0x${sHex}` as Hex }
+}
+
+
 export async function validateAttetsationAndSignature(
   { key, attestation, signature, result }: {
     key: string,
@@ -34,15 +115,25 @@ export async function validateAttetsationAndSignature(
 ) {
   console.log(key, attestation)
   const rootCert = new X509Certificate(DEFAULT_APPATTEST_ROOT_CERT_PEM)
-  console.log("root cert", Buffer.from(rootCert.rawData).toString('hex'))
+  const rootCertRaw = Buffer.from(rootCert.rawData).toString('hex');
+  const rootCertHash = keccak256(`0x${rootCertRaw}`)
+  console.log("root cert", rootCertRaw)
+  console.log("root cert hash", ROOT_CA_CERT_HASH, keccak256(`0x${rootCertRaw}`));
+
   const parsedAttestation = await parseAttestation(
     Buffer.from(attestation, "base64"),
   ) as ParsedAttestation
+  const intermediateCertRaw = Buffer.from(parsedAttestation.intermediateCert.rawData).toString('hex');
+  const intermediateCertHash = keccak256(`0x${intermediateCertRaw}`)
+  const leafCertRaw = Buffer.from(parsedAttestation.credCert.rawData).toString('hex');
+  const leafCertHash = keccak256(`0x${leafCertRaw}`)
 
   console.log(parsedAttestation.intermediateCert.rawData)
-  console.log("intermediate cert", Buffer.from(parsedAttestation.intermediateCert.rawData).toString('hex'))
+  console.log("intermediate cert", intermediateCertRaw)
+  console.log("intermediate cert hash", keccak256(`0x${intermediateCertRaw}`))
   console.log(parsedAttestation.intermediateCert.rawData)
-  console.log("leaf cert", Buffer.from(parsedAttestation.credCert.rawData).toString('hex'))
+  console.log("leaf cert", leafCertRaw)
+  console.log("leaf cert hash", keccak256(`0x${leafCertRaw}`))
 
   const attestationResult = await verifyAttestation(
     {
@@ -67,21 +158,38 @@ export async function validateAttetsationAndSignature(
 
   const clientDataHash = createHash('sha256').update(result).digest()
 
-  console.log(result, clientDataHash)
+  console.log(result, clientDataHash, sha256(stringToHex(result)))
 
   const parsedAssertion = await parseAssertion(Buffer.from(signature, "base64")) as ParsedAssertion;
-  console.log('signature', parsedAssertion.signature.toString('hex'))
+  const parsedSignature = parsedAssertion.signature.toString('hex')
+  console.log('signature', parsedSignature)
 
   console.log("message", Buffer.concat([
     parsedAssertion.authData,
     clientDataHash,
   ]).toString('hex'))
 
+  const message = Buffer.concat([
+    parsedAssertion.authData,
+    clientDataHash,
+  ])
+  const messageHex = `0x${message.toString('hex')}` as Hex
+  // const messageHash = createHash('sha256').update(message).digest().toString('hex')
+  const messageHash = sha256(messageHex)
+
   console.log("message hash",
-    createHash('sha256').update(Buffer.concat([
-      parsedAssertion.authData,
-      clientDataHash,
-    ])).digest().toString('hex'))
+    messageHash,
+    sha256(`0x${message.toString('hex')}`)
+  )
+
+  const publicKeyObject = createPublicKey({
+    key: attestationResult.publicKeyPem,
+  })
+  const jwk = publicKeyObject.export({ format: 'jwk' });
+
+  const publicKeyX = jwk.x ? `0x${base64UrlToHex(jwk.x)}` : ""
+  const publicKeyY = jwk.y ? `0x${base64UrlToHex(jwk.y)}` : ""
+  console.log("public key", publicKeyX, publicKeyY)
 
   const assertionResult = await verifyAssertion(
     clientDataHash,
@@ -103,5 +211,68 @@ export async function validateAttetsationAndSignature(
 
   console.log(attestationResult)
 
-  return { attestationValid, signatureValid }
+  const transactions = []
+
+  const intermediateCertPubkey = await publicClient.readContract({
+    address: appattestCertManagerAddress,
+    abi: appAttestCertManagerAbi,
+    functionName: 'certPubKey',
+    args: [intermediateCertHash],
+  })
+
+  if (intermediateCertPubkey === "0x") {
+    const { request } = await publicClient.simulateContract({
+      address: appattestCertManagerAddress,
+      abi: appAttestCertManagerAbi,
+      functionName: 'verifyCert',
+      args: [`0x${intermediateCertRaw}`, ROOT_CA_CERT_HASH],
+      account,
+    })
+    const hash = await walletClient.writeContract(request)
+    const receipt = await publicClient.waitForTransactionReceipt({ hash })
+    transactions.push(hash)
+
+    console.log('intermediateCert verified', hash, receipt);
+  }
+
+  const leafCertPubkey = await publicClient.readContract({
+    address: appattestCertManagerAddress,
+    abi: appAttestCertManagerAbi,
+    functionName: 'certPubKey',
+    args: [leafCertHash],
+  })
+
+  if (leafCertPubkey === "0x") {
+    const { request } = await publicClient.simulateContract({
+      address: appattestCertManagerAddress,
+      abi: appAttestCertManagerAbi,
+      functionName: 'verifyCert',
+      args: [`0x${leafCertRaw}`, intermediateCertHash],
+      account,
+    })
+    const hash = await walletClient.writeContract(request)
+    const receipt = await publicClient.waitForTransactionReceipt({ hash })
+    transactions.push(hash)
+
+    console.log('leafCert verified', hash, receipt);
+  }
+
+  const parsedDerSignature = parseDerSignature(parsedSignature);
+  console.log("parsedSignature", parsedDerSignature)
+
+  const { request } = await publicClient.simulateContract({
+    address: appattestCertManagerAddress,
+    abi: appAttestCertManagerAbi,
+    functionName: 'verifyP256SignedData',
+    args: [leafCertHash, messageHash, parsedDerSignature.r, parsedDerSignature.s],
+    account,
+  })
+  const hash = await walletClient.writeContract(request)
+  const receipt = await publicClient.waitForTransactionReceipt({ hash })
+  transactions.push(hash)
+
+  console.log('signature verified', hash, receipt);
+
+
+  return { attestationValid, signatureValid, rootCertHash, intermediateCert: `0x${intermediateCertRaw}`, intermediateCertHash, leafCert: `0x${leafCertRaw}`, leafCertHash, message: messageHex, messageHash, publicKeyX, publicKeyY, transactions }
 }

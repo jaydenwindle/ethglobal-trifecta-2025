@@ -13,6 +13,8 @@ export default async function Home({
 
   const validationResult = await validateAttetsationAndSignature({ key: key as string, attestation: attestation as string, signature: signature as string, result: result as string });
 
+  console.log(validationResult)
+
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-2">
       <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
@@ -50,7 +52,7 @@ export default async function Home({
 
       {validationResult.attestationValid ? (
         <span className="text-green-600 flex justify-center items-center">
-          <Check /> hardware attestation verified
+          <Check /> hardware attestation validated offchain
         </span>
       ) : (
         <span className="text-red-600 flex justify-center items-center">
@@ -60,7 +62,7 @@ export default async function Home({
 
       {validationResult.signatureValid ? (
         <span className="text-green-600 flex justify-center items-center">
-          <Check /> signature verified
+          <Check /> signature validated offchain
         </span>
       ) : (
         <span className="text-red-600 flex justify-center items-center">
@@ -68,8 +70,22 @@ export default async function Home({
         </span>
       )}
 
-      {validationResult.attestationValid && validationResult.signatureValid && (
-        <Button className="mt-4">validate onchain</Button>
+      {validationResult.transactions != undefined && validationResult.transactions.length > 0 && (
+        <>
+          <span className="text-green-600 flex justify-center items-center">
+            <Check /> verified onchain
+          </span>
+          {validationResult.transactions.map((txHash, index) => (
+            <>
+              <p className="font-bold">
+                Transaction {index + 1}:
+              </p>
+              <pre className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-3">
+                {txHash}
+              </pre>
+            </>
+          ))}
+        </>
       )}
 
     </div>
